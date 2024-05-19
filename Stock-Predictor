@@ -1,0 +1,139 @@
+import yfinance as yf
+import matplotlib.pyplot as plt
+import numpy as np
+
+# from pandas_datareader import data as pd
+import pandas as p
+from tensorflow import keras as ke
+import sklearn.preprocessing as sk
+
+
+# company = input("Input a Ticker")
+# TSLA = yf.Ticker("TSLA")
+# TSLA = TSLA.history(period="max").
+# data = TSLA['Close']
+
+# print(type(TSLA['Close'].to_numpy()))
+# print(TSLA.T) # Transposes the data
+
+# print(TSLA.columns)
+# # TSLA.drop('High')
+# print( p.arange(TSLA["Open"].to_numpy().size))
+
+# x_data_open = p.arange(TSLA["Open"].to_numpy().size)
+# y_data_open = TSLA["Open"].to_numpy()
+
+# x_data_close = p.arange(TSLA["Open"].to_numpy().size)
+# y_data_close = TSLA["Open"].to_numpy()
+# yf.pdr_override()
+# data = pd.get_data_yahoo("TSLA")
+# print(type(data))
+# print(type(TSLA))
+
+# atributes =list(TSLA.info.keys())
+# for x in atributes:
+#     print(type(x))
+
+
+# # for x in atributes:
+# #     print(x + ":"+ str(TSLA.info[x]))
+
+
+# # plt.plot(x_data_open,y_data_open,label="Opening of {company} prices",color = "green")
+# # plt.plot(x_data_close,y_data_close,label="Opening of {company} prices", color = "Red")
+
+# # plt.title("Opening and closing prices of " + company)
+# # plt.xlabel("Time in days")
+# # plt.ylabel("Price in Dollars")
+
+# # plt.show()
+
+
+company = "TSLA"
+comp = yf.download("TSLA", start="2022-01-01", end="2023-01-01")
+
+data = comp.to_numpy()
+
+
+# We have to scale the data between 1 and 0 so that the machine's load would be lighter
+
+# Using the MinMaxScaler method from the Sklearn and passing the tuple in the feature ranges to get meaningful numbers
+scaler = sk.MinMaxScaler(feature_range=(0, 1))
+# Created a numpy array of the fitted data
+scaled = scaler.fit_transform(comp["Close"].values.reshape(-1, 1))
+print(scaled)
+
+prediction = 30
+x_train = []
+y_train = []
+for x in range(prediction, len(scaled)):
+    x_train.append(scaled[x - prediction : x, 0])
+    y_train.append(scaled[x, 0])
+x_train, y_train = np.array(x_train), np.array(y_train)
+x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+
+# print(x_train)
+# print(x_train)
+# print(y_train)
+
+
+layer = ke.layers
+model = ke.Sequential()
+model.add(
+    layer.LSTM(units=50, return_sequences=True, input_shape=(x_train.shape[1], 1))
+)
+model.add(layer.Dropout(0.2))
+model.add(layer.LSTM(units=50, return_sequences=True))
+model.add(layer.Dropout(0.2))
+model.add(layer.LSTM(units=50))
+model.add(layer.Dropout(0.2))
+model.add(layer.Dense(1))  # prediction of the closing price at the end of the day
+
+model.compile(optimizer="adam", loss="mean_squared_error")
+model.fit(x_train, y_train, epochs=25, batch_size=32)
+
+
+total_dataset = p.concat((comp["Close"], comp["Close"]))
+model_inputs = total_dataset[len(total_dataset) - len(comp) - prediction :].values
+model_inputs = model_inputs.reshape(-1, 1)
+model_inputs = scaler.transform(model_inputs)
+
+
+x_test = []
+for x in range(prediction, len(model_inputs)):
+    x_test.append(model_inputs[x - prediction : x, 0])
+
+x_test = np.array(x_test)
+x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+
+predicted_prices = model.predict(x_test)
+predicted_prices = scaler.inverse_transform(predicted_prices)
+
+test_data = yf.Ticker("TSLA").history(start="2022-01-01", end="2023-01-01")
+actual_prices = comp["Close"].values[-len(predicted_prices) :]
+
+# print(predicted_prices)
+# Plot the Test predictions
+# plt.plot(actual_prices, color="black", label=f"Actual {company} Price")
+# plt.plot(predicted_prices, color="green", label=f"Predicted {company} Price")
+# plt.title(f"{company} Share Price")
+# plt.xlabel("Time")
+# plt.ylabel(f"{company} Share Price")
+# plt.legend()
+# plt.show()
+
+
+last_sequence = x_test[-1]
+last_sequence = np.reshape(
+    last_sequence, (1, last_sequence.shape[0], last_sequence.shape[1])
+)
+
+predicted_prices = model.predict(last_sequence)
+predicted_prices = scaler.inverse_transform(predicted_prices)
+print(comp["Close"])
+print("Closing Today: " + str(comp["Close"][-1]))
+print("Predicted Price: " + str(predicted_prices[0, 0]))
+# print(
+#     "Actual Price: "
+#     + str(yf.Ticker("TSLA").history(start="2022-01-01", end="2023-01-03")["Close"][-1])
+# )
